@@ -6,7 +6,7 @@ MODULE IntegrationModule
     MeV, Centimeter, Second
   USE ProgramHeaderModule, ONLY: &
     nDOFX, nDOFE, &
-    nNodesX, nNodesE, & 
+    nX, nNodesX, nE, nNodesE, & 
     iZ_B0, iZ_E0, iE_B0, iE_E0, &
     iX_B0
   USE NeutrinoOpacitiesComputationModule, ONLY: &
@@ -18,6 +18,8 @@ MODULE IntegrationModule
     iNuE, iNuE_Bar
   USE MeshModule, ONLY: &
     MeshE, NodeCoordinate
+  USE ReferenceElementModuleX, ONLY: &
+    NodeNumberTableX
   USE UtilitiesModule, ONLY: &
     NodeNumber
   USE FluidFieldsModule, ONLY: &                          
@@ -280,7 +282,6 @@ CONTAINS
 
     INTEGER, INTENT(IN) :: nFlavors
 
-    INTEGER :: nZ(4), nX(3)
     INTEGER :: iX1, iX2, iX3, iNodeX
     INTEGER :: iE, iNodeE
     INTEGER :: iN_E, iN_X, iPF, iAF, iPR
@@ -288,10 +289,8 @@ CONTAINS
     INTEGER :: iNodeX_G, iNodeE_G
     INTEGER :: iNodeX1, iNodeX2, iNodeX3, iNode
 
-    nZ = iZ_E0 - iZ_B0 + 1           
-    nX = nZ(2:4)                     
     nX_G = nDOFX * PRODUCT( nX )     
-    nE_G = nNodesE * nZ(1)        
+    nE_G = nNodesE * nE        
 
     ALLOCATE( E_N  (nE_G    ) )
     ALLOCATE( PF_N (nX_G,nPF) )
@@ -313,7 +312,7 @@ CONTAINS
     !$OMP PARALLEL DO PRIVATE( iE, iNodeE )
     DO iN_E = 1, nE_G
 
-      iE     = MOD( (iN_E-1) / nDOFE, nZ(1) ) + iE_B0
+      iE     = MOD( (iN_E-1) / nDOFE, nE    ) + iE_B0
       iNodeE = MOD( (iN_E-1)        , nDOFE ) + 1
 
       E_N(iN_E) = NodeCoordinate( MeshE, iE, iNodeE )
@@ -385,29 +384,37 @@ CONTAINS
 
   SUBROUTINE FinalizeArrays
    
-    INTEGER :: iN_X, iN_E
+    INTEGER :: iN_X, iN_E, iE, iNodeE
     INTEGER :: iX1, iX2, iX3, iNodeX
-    INTEGER :: nZ(4), nX(3)
-    
-    nZ = iZ_E0 - iZ_B0 + 1
-    nX = nZ(2:4)
-    nZ = iZ_E0 - iZ_B0 + 1
-    
-    !$OMP PARALLEL DO PRIVATE( iX1, iX2, iX3, iNodeX )
+    INTEGER :: iNodeX1, iNodeX2, iNodeX3, iNode
+
+    !$OMP PARALLEL DO PRIVATE( iX1,iX2,iX3,iNodeX,iNodeX1,iNodeX2,iNodeX3,iNode,iN_E )
     DO iN_X = 1,nX_G
-      DO iN_E = 1,nE_G
+      iN_E = 0
+      DO iE = iE_B0,iE_E0
+        DO iNodeE = 1,nNodesE
 
-        iX3    = MOD( (iN_X-1) / ( nDOFX * nX(1) * nX(2) ), nX(3) ) + iX_B0(3)
-        iX2    = MOD( (iN_X-1) / ( nDOFX * nX(1)         ), nX(2) ) + iX_B0(2)
-        iX1    = MOD( (iN_X-1) / ( nDOFX                 ), nX(1) ) + iX_B0(1)
-        iNodeX = MOD( (iN_X-1)                            , nDOFX ) + 1
+          iX3    = MOD( (iN_X-1) / ( nDOFX * nX(1) * nX(2) ), nX(3) ) + iX_B0(3)
+          iX2    = MOD( (iN_X-1) / ( nDOFX * nX(1)         ), nX(2) ) + iX_B0(2)
+          iX1    = MOD( (iN_X-1) / ( nDOFX                 ), nX(1) ) + iX_B0(1)
+          iNodeX = MOD( (iN_X-1)                            , nDOFX ) + 1
 
-        uPR(iNodeX,iN_E,iX1,iX2,iX3,iPR_D,:) = J0(iN_E,iN_X,:)
+          iNodeX1 = NodeNumberTableX(1,iNodeX)
+          iNodeX2 = NodeNumberTableX(2,iNodeX)
+          iNodeX3 = NodeNumberTableX(3,iNodeX)
+          iNode   = NodeNumber( iNodeE, iNodeX1, iNodeX2, iNodeX3 )
+
+          iN_E = iN_E + 1
+
+          uPR(iNode,iE,iX1,iX2,iX3,iPR_D,:) = J0(iN_E,iN_X,:)
+
+        END DO
 
       END DO
     END DO
     !$OMP END PARALLEL DO
-      
+
+
     DEALLOCATE( E_N, PF_N, AF_N, uPR_N, &
                 Chi, eta, kappa,      &
                 eta_avg, kappa_avg,   &

@@ -16,6 +16,8 @@ MODULE FlavorOpacitiesModule
     iE_B0
   USE MeshModule, ONLY: &
     MeshE, NodeCoordinate
+  USE ReferenceElementModuleE, ONLY: &
+    WeightsE
   USE FluidFieldsModule, ONLY: &
     uAF, iAF_T, &
     iAF_Me, iAF_Mp, iAF_Mn
@@ -298,17 +300,17 @@ CONTAINS
 
   END SUBROUTINE ComputeNu4CollisionTerm
 
-
-
   SUBROUTINE ComputeNu4Kernels
 
-    REAL(DP), ALLOCATABLE :: E_N(:), E_Left(:), E_Right(:)
+    REAL(DP), ALLOCATABLE :: E_N(:)
     INTEGER  :: nE_G
     
-    INTEGER  :: iEk, iE1, iE3
+    INTEGER  :: iN_Ek, iN_E1, iN_E3, iN_E
     INTEGER  :: nE, iE, iNodeE
+    INTEGER  :: iE1, iE3, iNodeE1, iNodeE3
     REAL(DP) :: qk, q1, q2, q3, E2
     REAL(DP) :: V1, V3 ! phase-space volumes (cm^-3)
+    REAL(DP) :: dE
     REAL(DP) :: hbarc_mevcm = 1.97326966d-11 
     
     nE = iE_E0 - iE_B0 + 1
@@ -318,8 +320,6 @@ CONTAINS
     ALLOCATE( KernelNu4Scat(nE_G,nE_G,nE_G) )
 
     ALLOCATE( E_N    (nE_G) )
-    ALLOCATE( E_Left (nE_G) )
-    ALLOCATE( E_Right(nE_G) )
     
     DO iN_E = 1, nE_G
 
@@ -328,61 +328,66 @@ CONTAINS
 
       E_N(iN_E) = NodeCoordinate( MeshE, iE, iNodeE )
 
-      ! GET ENERGIES AT INTERFACE !--- WARING ---! ONLY WORKS WITH 1 NODE
-      E_Left (iN_E) = E_N(iN_E) - Half * MeshE % Width(iN_E)
-      E_Right(iN_E) = E_N(iN_E) + Half * MeshE % Width(iN_E)
-
+      dE = MeshE % Width(iE)
+      
     ENDDO
 
     KernelNu4Pair(:,:,:) = Zero
     KernelNu4Scat(:,:,:) = Zero
 
-    DO iEk=1,nE_G
+    DO iN_Ek = 1,nE_G
        
-       qk = E_N(iEk) / MeV
+       qk = E_N(iN_Ek) / MeV
        
-       DO iE1=1,nE_G
+       DO iN_E1 = 1,nE_G
          
-         q1 = E_N(iE1) / MeV
+         q1 = E_N(iN_E1) / MeV
          
-         V1 = FourPi * ( E_Right(iE1)**3 - E_Left(iE1)**3 ) / Three  &
-                     / ( TwoPi )**3 / MeV**3 / hbarc_mevcm**3      
+         iE1     = MOD( (iN_E1-1) / nDOFE, nE    ) + iE_B0
+         iNodeE1 = MOD( (iN_E1-1)        , nDOFE ) + 1 
+         dE = MeshE % Width(iE1) 
+         
+         V1 = FourPi * dE * WeightsE(iNodeE1) / ( TwoPi )**3 / MeV / hbarc_mevcm
         
-         DO iE3=1,nE_G
+         DO iN_E3 = 1,nE_G
            
-           q3 = E_N(iE3) / MeV
+           q3 = E_N(iN_E3) / MeV
+            
+           iE3     = MOD( (iN_E3-1) / nDOFE, nE    ) + iE_B0
+           iNodeE3 = MOD( (iN_E3-1)        , nDOFE ) + 1
+           dE = MeshE % Width(iE3)
 
-           V3 = Fourpi * ( E_Right(iE3)**3 - E_Left(iE3)**3 ) / Three &
-                       / ( TwoPi )**3 / MeV**3 / hbarc_mevcm**3
+           V3 = Fourpi * dE * WeightsE(iNodeE3) / ( TwoPi )**3 / MeV / hbarc_mevcm 
 
-           E2 = E_N(iE1) + E_N(iE3) - E_N(iEk)
+           E2 = E_N(iN_E1) + E_N(iN_E3) - E_N(iN_Ek)
 
            ! result is 1/cm
            IF ( E2 > E_N(1) .AND. E2 <= E_N(nE_G) ) THEN
              q2 = E2 / MeV
              
-             KernelNu4Pair(iE3,iE1,iEk) = Nu4Pair_Kernel_Single( qk, q1, q2, q3) * V1 * V3
+             KernelNu4Pair(iN_E3,iN_E1,iN_Ek) = Nu4Pair_Kernel_Single( qk, q1, q2, q3) * V1 * V3
              
-             KernelNu4Scat(iE3,iE1,iEk) = Nu4Scat_Kernel_Single( qk, q1, q2, q3) * V1 * V3
+             KernelNu4Scat(iN_E3,iN_E1,iN_Ek) = Nu4Scat_Kernel_Single( qk, q1, q2, q3) * V1 * V3
              
              !NOW FIX UNITS SINCE SHERWOOD SOLVES 1/c*df/dt
-             KernelNu4Pair(iE3,iE1,iEk) = KernelNu4Pair(iE3,iE1,iEk) * SpeedOfLightCGS * One / Second 
-             KernelNu4Scat(iE3,iE1,iEk) = KernelNu4Scat(iE3,iE1,iEk) * SpeedOfLightCGS * One / Second
+             KernelNu4Pair(iN_E3,iN_E1,iN_Ek) = KernelNu4Pair(iN_E3,iN_E1,iN_Ek) * SpeedOfLightCGS * One / Second 
+             KernelNu4Scat(iN_E3,iN_E1,iN_Ek) = KernelNu4Scat(iN_E3,iN_E1,iN_Ek) * SpeedOfLightCGS * One / Second
         
-             IF( KernelNu4Pair(iE3,iE1,iEk) < 0 ) THEN
-                WRITE(*,*) E2, iEk, iE1, iE3, KernelNu4Pair(iE3,iE1,iEk)
+             !WRITE(*,'(3I4,2ES13.5E3)') iN_E3,iN_E1,iN_Ek, KernelNu4Pair(iN_E3,iN_E1,iN_Ek), KernelNu4Scat(iN_E3,iN_E1,iN_Ek)
+            IF( KernelNu4Pair(iN_E3,iN_E1,iN_Ek) < 0 ) THEN
+                WRITE(*,*) E2, iN_Ek, iN_E1, iN_E3, KernelNu4Pair(iN_E3,iN_E1,iN_Ek)
                 STOP "KernelNu4Pair value less than 0"
              END IF
 
-             IF( KernelNu4Scat(iE3,iE1,iEk) < 0 ) THEN
-                WRITE(*,*) E2, iEk, iE1, iE3, KernelNu4Scat(iE3,iE1,iEk)
+             IF( KernelNu4Scat(iN_E3,iN_E1,iN_Ek) < 0 ) THEN
+                WRITE(*,*) E2, iN_Ek, iN_E1, iN_E3, KernelNu4Scat(iN_E3,iN_E1,iN_Ek)
                 STOP "KernelNu4Scat value less than 0"
              END IF
     
            ELSE
  
-             KernelNu4Scat(iE3,iE1,iEk) = Zero
-             KernelNu4Pair(iE3,iE1,iEk) = Zero
+             KernelNu4Scat(iN_E3,iN_E1,iN_Ek) = Zero
+             KernelNu4Pair(iN_E3,iN_E1,iN_Ek) = Zero
            
            ENDIF
         
@@ -390,7 +395,7 @@ CONTAINS
       END DO
     END DO
 
-  DEALLOCATE( E_N, E_right, E_left )
+  DEALLOCATE( E_N )
 
   END SUBROUTINE ComputeNu4Kernels
 
@@ -411,12 +416,12 @@ CONTAINS
        STOP "ERROR: passed q2 Does not conserve energy"
     ENDIF
 
-    Kernel = Gfermi**2 * Pi * hbarc_mevcm **5 * &
+    Kernel = Gfermi**2 * Pi * hbarc_mevcm * &
       (                      nu4_D3( q1,q2,q3,qk )   &
          + q1 * q2 * q3 * qk * nu4_D1( q1,q2,q3,qk )   &
          + q2 * qk           * nu4_D2( q2,qk,q1,q3 )   &
          + q1 * q3           * nu4_D2( q1,q3,q2,qk ) ) &
-                  / q1**2 / q3**2 / qk**2
+       / qk**2
     
   END FUNCTION Nu4Scat_Kernel_Single
 
@@ -437,12 +442,12 @@ CONTAINS
        STOP "ERROR: passed q2 Does not conserve energy"
     ENDIF
     
-    Kernel = Gfermi**2 * Pi * hbarc_mevcm **5 * &
+    Kernel = Gfermi**2 * Pi * hbarc_mevcm * &
         (                      nu4_D3( q1,q2,q3,qk )   &
          + q1 * q2 * q3 * qk * nu4_D1( q1,q2,q3,qk )   &
          - q1 * qk           * nu4_D2( q1,qk,q2,q3 )   &
          - q2 * q3           * nu4_D2( q2,q3,q1,qk ) ) &
-                  / q1**2 / q3**2 / qk**2
+        / qk**2
 
   END FUNCTION Nu4Pair_Kernel_Single
 

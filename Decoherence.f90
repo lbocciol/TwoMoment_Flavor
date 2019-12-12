@@ -85,7 +85,7 @@ PROGRAM Decoherence
   REAL(DP) :: t, dt, t_end
   REAL(DP) :: dt_max
 
-  nNodes = 1
+  nNodes = 2
   nSpecies = 6
   ! nFlavors corresponds to nu_e and nu_e_bar for now
   ! but hopefully we can change that
