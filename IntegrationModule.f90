@@ -51,9 +51,9 @@ MODULE IntegrationModule
 
 CONTAINS
 
-  SUBROUTINE TimeStepping_Decoherence(dt, nFlavors)
+  SUBROUTINE TimeStepping_Decoherence( dt, nOpacities, nFlavors )
     
-    INTEGER,  INTENT(IN)    :: nFlavors
+    INTEGER,  INTENT(IN)    :: nOpacities, nFlavors
     REAL(DP), INTENT(INOUT) :: dt
     
     LOGICAL  :: Recycle
@@ -62,10 +62,10 @@ CONTAINS
     INTEGER  :: MaxIter = 100
     REAL(DP) :: Error
 
-    CALL InitializeArrays(nFlavors)
+    CALL InitializeArrays(nOpacities)
     
     !$OMP PARALLEL DO PRIVATE(iS)
-    DO iS = 1, nFlavors
+    DO iS = 1, nOpacities
 
       CALL ComputeNeutrinoOpacities_EC_Points &   
              ( 1, nE_G, 1, nX_G, &                
@@ -81,18 +81,18 @@ CONTAINS
     CALL ComputeEmission(  &
         E_N(:), Chi(:,:,:), &
         kappa(:,:,:), eta(:,:,:), &
-        nFlavors, nE_G, nX_G )
+        nOpacities, nE_G, nX_G )
       
     CALL ComputeEmissionAbsorptionAvg(   &
        kappa_avg, eta_avg, kappa, eta, &
-       nFlavors, nE_G, nX_G )
+       nOpacities, nE_G, nX_G )
 
     J0_old = uPR_N(:,:,iPR_D,:)
 
-    !$OMP PARALLEL DO PRIVATE(iEk,iX)
+    !$OMP PARALLEL DO COLLAPSE(2) PRIVATE(iEk,iX)
     DO iEk = 1,nE_G   
       DO iX = 1,nX_G
-        
+      
         CALL ComputeNu4CollisionTerms( &
             J0_old(:,iX,:), &
             CollisionTermNu4(iEk,iX,:), &
@@ -112,7 +112,7 @@ CONTAINS
       CALL SolveThisIteration(0.8d0 * dt,J0_check)
       
       Error = 0
-      !$OMP PARALLEL DO 
+      !$OMP PARALLEL DO COLLAPSE(2) PRIVATE( iE, iX, iS ) 
       DO iE = 1,nE_G
       DO iX = 1,nX_G
       DO iS = 1,nSpecies
@@ -124,7 +124,7 @@ CONTAINS
       END DO
       END DO
       !$OMP END PARALLEL DO
-      
+    
       IF ( Error .GT. 1.0d-3 ) THEN
         
         dt = 0.8d0 * dt
@@ -172,7 +172,7 @@ CONTAINS
   
         END DO
       
-        !$OMP PARALLEL DO PRIVATE(iEk,iX)
+        !$OMP PARALLEL DO COLLAPSE(2) PRIVATE(iEk,iX)
         DO iEk = 1,nE_G
           DO iX = 1,nX_G
   
@@ -239,7 +239,7 @@ CONTAINS
 
     INTEGER :: iS, iE, iX
 
-    !$OMP PARALLEL DO PRIVATE( iE, iX, iS )
+    !$OMP PARALLEL DO COLLAPSE(3) PRIVATE( iE, iX, iS )
     DO iE = 1,nE_G
       DO iX = 1,nX_G
         DO iS = 1,nSpecies
@@ -278,9 +278,9 @@ CONTAINS
 
   END SUBROUTINE SolveThisIteration
 
-  SUBROUTINE InitializeArrays(nFlavors)
+  SUBROUTINE InitializeArrays(nOpacities)
 
-    INTEGER, INTENT(IN) :: nFlavors
+    INTEGER, INTENT(IN) :: nOpacities
 
     INTEGER :: iX1, iX2, iX3, iNodeX
     INTEGER :: iE, iNodeE
@@ -295,9 +295,9 @@ CONTAINS
     ALLOCATE( E_N  (nE_G    ) )
     ALLOCATE( PF_N (nX_G,nPF) )
     ALLOCATE( AF_N (nX_G,nAF) )
-    ALLOCATE( Chi  (nE_G,nX_G,nFlavors) )
-    ALLOCATE( eta  (nE_G,nX_G,nFlavors) )
-    ALLOCATE( kappa(nE_G,nX_G,nFlavors) )
+    ALLOCATE( Chi  (nE_G,nX_G,nOpacities) )
+    ALLOCATE( eta  (nE_G,nX_G,nOpacities) )
+    ALLOCATE( kappa(nE_G,nX_G,nOpacities) )
  
     ALLOCATE( eta_avg(nE_G,nX_G,nSpecies) )
     ALLOCATE( kappa_avg(nE_G,nX_G,nSpecies) )

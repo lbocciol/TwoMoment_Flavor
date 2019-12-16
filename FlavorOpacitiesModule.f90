@@ -41,13 +41,13 @@ MODULE FlavorOpacitiesModule
 CONTAINS
 
   SUBROUTINE ComputeEmission(E_N, Chi, kappa, eta, &
-                             nFlavors, nE_G, nX_G)
+                             nOpacities, nE_G, nX_G)
 
-    INTEGER,  INTENT(IN)  :: nE_G, nX_G, nFlavors
+    INTEGER,  INTENT(IN)  :: nE_G, nX_G, nOpacities
     REAL(DP), INTENT(IN)  :: E_N  (nE_G)
-    REAL(DP), INTENT(IN)  :: Chi  (nE_G,nX_G,nFlavors)
-    REAL(DP), INTENT(OUT) :: eta  (nE_G,nX_G,nFlavors)
-    REAL(DP), INTENT(OUT) :: kappa(nE_G,nX_G,nFlavors)
+    REAL(DP), INTENT(IN)  :: Chi  (nE_G,nX_G,nOpacities)
+    REAL(DP), INTENT(OUT) :: eta  (nE_G,nX_G,nOpacities)
+    REAL(DP), INTENT(OUT) :: kappa(nE_G,nX_G,nOpacities)
 
     INTEGER  :: iS, iN_E, iN_X
     INTEGER  :: iX1, iX2, iX3, iNodeX
@@ -63,7 +63,7 @@ CONTAINS
       iX1    = MOD( (iN_X-1) / ( nDOFX                 ), nX(1) ) + iX_B0(1) 
       iNodeX = MOD( (iN_X-1)                            , nDOFX ) + 1    
     
-      DO iS = 1, nFlavors
+      DO iS = 1, nOpacities
       
         IF ( iS .EQ. iNuE ) THEN
   
@@ -102,12 +102,12 @@ CONTAINS
 
   SUBROUTINE ComputeEmissionABSorptionAvg ( &
         kappa_avg, eta_avg, kappa, eta,   &
-        nFlavors, nE_G, nX_G)
+        nOpacities, nE_G, nX_G)
     
-    INTEGER,  INTENT(IN)  :: nFlavors
+    INTEGER,  INTENT(IN)  :: nOpacities
     INTEGER,  INTENT(IN)  :: nE_G, nX_G
-    REAL(DP), INTENT(IN)  :: kappa  (nE_G,nX_G,nFlavors)
-    REAL(DP), INTENT(IN)  :: eta    (nE_G,nX_G,nFlavors)
+    REAL(DP), INTENT(IN)  :: kappa  (nE_G,nX_G,nOpacities)
+    REAL(DP), INTENT(IN)  :: eta    (nE_G,nX_G,nOpacities)
     REAL(DP), INTENT(OUT) :: kappa_avg(nE_G,nX_G,nSpecies)
     REAL(DP), INTENT(OUT) :: eta_avg(nE_G,nX_G,nSpecies)
 
@@ -148,7 +148,7 @@ CONTAINS
 
 
   SUBROUTINE ComputeNu4CollisionTerms( J0, CollisionTerm, &
-          E_N, nE_G, iEk, nFlavors)
+          E_N, nE_G, iEk, nF)
     
     INTEGER,  INTENT(IN)  :: nE_G, iEk
     REAL(DP), INTENT(IN)  :: E_N(nE_G)
@@ -157,60 +157,60 @@ CONTAINS
     
     INTEGER  :: i1,i2,i3
     INTEGER  :: imat, iE
-    REAL(DP) :: J0_E(2,nE_G,nFlavors,nFlavors)
+    REAL(DP) :: J0_E(2,nE_G,nF,nF)
 
     imat = nSpecies / 2
 
     ! 1 is for matter, 2 is for antimatter
     DO iE = 1,nE_G
 
-      J0_E(1,iE,:,:) = PackIntoMatrix( J0(iE,1:imat),  nSpecies, nFlavors )
-      J0_E(2,iE,:,:) = PackIntoMatrix( J0(iE,imat+1:), nSpecies, nFlavors )
+      J0_E(1,iE,:,:) = PackIntoMatrix( J0(iE,1:imat),  nSpecies, nF )
+      J0_E(2,iE,:,:) = PackIntoMatrix( J0(iE,imat+1:), nSpecies, nF )
 
     END DO
 
     CALL ComputeNu4CollisionTerm( J0_E, CollisionTerm(1:imat), &
-        E_N, nE_G, iEk, nFlavors)
+        E_N, nE_G, iEk, nF)
 
     !Flip them to get the Collision term for antimatter
     DO iE = 1,nE_G
 
-      J0_E(2,iE,:,:) = PackIntoMatrix( J0(iE,1:imat),  nSpecies, nFlavors )
-      J0_E(1,iE,:,:) = PackIntoMatrix( J0(iE,imat+1:), nSpecies, nFlavors )
+      J0_E(2,iE,:,:) = PackIntoMatrix( J0(iE,1:imat),  nSpecies, nF )
+      J0_E(1,iE,:,:) = PackIntoMatrix( J0(iE,imat+1:), nSpecies, nF )
 
     END DO
 
     CALL ComputeNu4CollisionTerm( J0_E, CollisionTerm(imat+1:), &
-        E_N, nE_G, iEk, nFlavors)
+        E_N, nE_G, iEk, nF)
 
   END SUBROUTINE ComputeNu4CollisionTerms
 
 
   SUBROUTINE ComputeNu4CollisionTerm( J0_E, CollisionTerm, &
-          E_N, nE_G, iEk, nFlavors)
+          E_N, nE_G, iEk, nF)
 
     INTEGER,  INTENT(IN)  :: nE_G, iEk
-    REAL(DP), INTENT(IN)  :: J0_E         (2,nE_G,nFlavors,nFlavors)
+    REAL(DP), INTENT(IN)  :: J0_E         (2,nE_G,nF,nF)
     REAL(DP), INTENT(IN)  :: E_N(nE_G)
     REAL(DP), INTENT(OUT) :: CollisionTerm(nSpecies/2)
 
-    REAL(DP) :: FirstTerm      (nFlavors,nFlavors)
-    REAL(DP) :: SecondTerm     (nFlavors,nFlavors)
-    REAL(DP) :: FirstTermG     (nFlavors,nFlavors)
-    REAL(DP) :: SecondTermG    (nFlavors,nFlavors)
-    REAL(DP) :: AntiCommutator1(nFlavors,nFlavors)
-    REAL(DP) :: AntiCommutator2(nFlavors,nFlavors)
-    REAL(DP) :: CollisionMatrix(nFlavors,nFlavors)
-    REAL(DP) :: tmp            (nFlavors,nFlavors)
-    REAL(DP) :: Identity       (nFlavors,nFlavors)
-    REAL(DP) :: J0_E2(2,nFlavors,nFlavors)
+    REAL(DP) :: FirstTerm      (nF,nF)
+    REAL(DP) :: SecondTerm     (nF,nF)
+    REAL(DP) :: FirstTermG     (nF,nF)
+    REAL(DP) :: SecondTermG    (nF,nF)
+    REAL(DP) :: AntiCommutator1(nF,nF)
+    REAL(DP) :: AntiCommutator2(nF,nF)
+    REAL(DP) :: CollisionMatrix(nF,nF)
+    REAL(DP) :: tmp            (nF,nF)
+    REAL(DP) :: Identity       (nF,nF)
+    REAL(DP) :: J0_E2(2,nF,nF)
     REAL(DP) :: E2
 
     INTEGER  :: iE, iE1, iE3
 
     !Consider defining Identity in some module without revaluating it every time
     Identity(:,:) = Zero
-    DO iS = 1, nFlavors
+    DO iS = 1, nF
       Identity(iS,iS) = One
     END DO
     
@@ -227,8 +227,8 @@ CONTAINS
     
       IF ( (E2 >= E_N(1)) .AND. (E2 < E_N(nE_G)) ) THEN
 
-        DO iS1 = 1,nFlavors
-          DO iS2 = 1,nFlavors
+        DO iS1 = 1,nF
+          DO iS2 = 1,nF
   
             CALL QuadraticInterpolation1D( E_N, J0_E(1,:,iS1,iS2), nE_G, &
                   E2, J0_E2(1,iS1,iS2) )
@@ -241,36 +241,36 @@ CONTAINS
 
         ! Scattering on nu, i.e. 3rd line in eq. 96 of Blaschke (2016)
         tmp = MatMul( Identity - J0_E(1,iE1,:,:) , J0_E2(1,:,:) )
-        FirstTerm = FirstTerm + MatMul( TraceI( tmp, nFlavors ) + tmp , &
+        FirstTerm = FirstTerm + MatMul( TraceI( tmp, nF ) + tmp , &
                       Identity - J0_E(1,iE3,:,:) ) * &
                          KernelNu4Scat(iE3,iE1,iEk)
         
         ! Scattering on nubar, i.e. first part of 5th line in eq. 96 of Blaschke (2016)
         tmp = MatMul( J0_E2(2,:,:) , Identity - J0_E(2,iE1,:,:) )
-        SecondTerm = SecondTerm + MatMul( TraceI( tmp, nFlavors ) + tmp , &
+        SecondTerm = SecondTerm + MatMul( TraceI( tmp, nF ) + tmp , &
                         Identity - J0_E(1,iE3,:,:) ) * &
                            KernelNu4Pair(iE3,iE1,iEk)
 
         ! Scattering on nubar, i.e. second part of 5th line in eq. 96 of Blaschke (2016)
         tmp = MatMul( Identity - J0_E(1,iE3,:,:) , Identity - J0_E(2,iE1,:,:) )
         SecondTerm = SecondTerm + &
-              MatMul( TraceI( tmp, nFlavors ) + tmp , J0_E2(2,:,:) ) * &
+              MatMul( TraceI( tmp, nF ) + tmp , J0_E2(2,:,:) ) * &
                 KernelNu4Pair(iE3,iE1,iEk)
 
         ! Gain part
         ! Scattering on nu, i.e. 3rd line in eq. 96 of Blaschke (2016)
         tmp = MatMul( J0_E(1,iE1,:,:) , Identity - J0_E2(1,:,:) )
-        FirstTermG = FirstTermG + MatMul( TraceI( tmp, nFlavors ) + tmp , &
+        FirstTermG = FirstTermG + MatMul( TraceI( tmp, nF ) + tmp , &
                         J0_E(1,iE3,:,:) ) * KernelNu4Scat(iE3,iE1,iEk)
 
         ! Scattering on nubar, i.e. first part of 5th line in eq. 96 of Blaschke (2016)
         tmp = MatMul( Identity - J0_E2(2,:,:) , J0_E(2,iE1,:,:) )
-        SecondTermG = SecondTermG + MatMul( TraceI( tmp, nFlavors ) + tmp , &
+        SecondTermG = SecondTermG + MatMul( TraceI( tmp, nF ) + tmp , &
                          J0_E(1,iE3,:,:) ) * KernelNu4Pair(iE3,iE1,iEk)
 
         ! Scattering on nubar, i.e. second part of 5th line in eq. 96 of Blaschke (2016)
         tmp = MatMul( J0_E(1,iE3,:,:) , J0_E(2,iE1,:,:) )
-        SecondTermG = SecondTermG + MatMul( TraceI( tmp, nFlavors ) + tmp , &
+        SecondTermG = SecondTermG + MatMul( TraceI( tmp, nF ) + tmp , &
                          Identity - J0_E2(2,:,:) ) * &
                             KernelNu4Pair(iE3,iE1,iEk)
 
@@ -296,7 +296,7 @@ CONTAINS
 
     CollisionMatrix = CollisionMatrix + ( AntiCommutator1 + AntiCommutator2 )
 
-    CollisionTerm   = FlattenMatrix( CollisionMatrix, nFlavors, nSpecies / 2 )
+    CollisionTerm   = FlattenMatrix( CollisionMatrix, nF, nSpecies / 2 )
 
   END SUBROUTINE ComputeNu4CollisionTerm
 

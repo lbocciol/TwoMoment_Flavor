@@ -76,36 +76,37 @@ PROGRAM Decoherence
   IMPLICIT NONE
 
   LOGICAL  :: wrt
-  INTEGER  :: nFlavors
+  INTEGER  :: nFlavors, nOpacities
   INTEGER  :: iCycle, iCycleD, iCycleW
   INTEGER  :: wrt_control
   INTEGER  :: nNodes, nSpecies
   INTEGER  :: nE, bcE, nX(3), bcX(3)
-  REAL(DP) :: eL, eR, xL(3), xR(3)
+  REAL(DP) :: eL, eR, xL(3), xR(3), ZoomX(3)
   REAL(DP) :: t, dt, t_end
   REAL(DP) :: dt_max
 
   nNodes = 2
   nSpecies = 6
-  ! nFlavors corresponds to nu_e and nu_e_bar for now
-  ! but hopefully we can change that
+
   nFlavors = 2
+  nOpacities = 2
 
-  nX  = [ 2, 1, 1 ]
-  xL  = [ 5.0d0 * Kilometer, 0.0_DP, 0.0_DP ]
-  xR  = [ 6.0d0 * Kilometer, Pi,     TwoPi  ]
+  nX  = [ 128, 1, 1 ]
+  xL  = [ 0.0d0 * Kilometer, 0.0_DP, 0.0_DP ]
+  xR  = [ 5.0d2 * Kilometer, Pi,     TwoPi  ]
   bcX = [ 1, 0, 0 ]
+  ZoomX = [ 1.10851_DP, 1.0_DP, 1.0_DP ]
 
-  nE  = 40
-  eL  = 1.0d0 * MeV
-  eR  = 2.0d2 * MeV
+  nE  = 50
+  eL  = 0.5d0 * MeV
+  eR  = 200.5d0 * MeV
   bcE = 0
 
   t       = 0.0_DP
   t_end   = 1.0      * Second
   dt      = 1.0d-15  * Second
   
-  iCycleD = 10
+  iCycleD = 1
   iCycleW = 10
 
   CALL InitializeProgram &
@@ -121,6 +122,8 @@ PROGRAM Decoherence
              = xL, &
            xR_Option &
              = xR, &
+           ZoomX_Option &
+             = ZoomX, &
            nE_Option &
              = nE, &
            swE_Option &
@@ -187,7 +190,7 @@ PROGRAM Decoherence
 !             = 'wl-Op-SFHo-15-25-50-E40-B85-Pair.h5', &    
            Verbose_Option = .TRUE. )                       
 
-  CALL CreateNeutrinoOpacities( nZ, nNodesZ, nFlavors )
+  CALL CreateNeutrinoOpacities( nZ, nNodesZ, nOpacities )
 
   ! --- Initialize Moment Closure ---
 
@@ -249,7 +252,7 @@ PROGRAM Decoherence
 
     CALL TimersStart( Timer_Evolve )
 
-    CALL TimeStepping_Decoherence(dt, nFlavors)
+    CALL TimeStepping_Decoherence(dt, nOpacities, nFlavors)
         
     t = t + dt
 
